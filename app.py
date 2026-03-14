@@ -37,14 +37,14 @@ with st.sidebar:
             st.session_state["ai_results"] = engine.get_strategy_pool(strat)
 
     with sb_tabs[2]:
-        ai_q = st.text_area("小白选股", placeholder="快速上涨且回撤不多...")
+        ai_q = st.text_area("小白选股描述", placeholder="如：快速上涨而回撤不多")
         if st.button("🧠 AI 语义扫描", use_container_width=True):
             st.session_state["ai_results"] = engine.get_ai_screener(ai_q)
 
-# ── 主界面：研判区 ──
+# ── 主界面：展示逻辑 ──
 st.markdown('<h1 style="color:#CC0000;">🐉 龙眼 A股深度研判系统</h1>', unsafe_allow_html=True)
 
-# 展示选股池 (AI 信心模块)
+# 展示选股池 (AI 胜率追踪)
 if st.session_state["ai_results"] is not None:
     st.subheader("🎯 推荐标的 (历史胜率追踪)")
     for _, row in st.session_state["ai_results"].iterrows():
@@ -52,7 +52,7 @@ if st.session_state["ai_results"] is not None:
         with c1:
             st.markdown(f"""
             <div style="background:#111;padding:12px;border-radius:8px;border-left:4px solid #CC0000;margin-bottom:8px;">
-                <b>{row['名称']} ({row['代码']})</b> <span style="color:#FFD700;margin-left:15px;">{row['AI胜率标签']} | 入选后最高涨幅: {row['最高涨幅']}</span>
+                <b>{row['名称']} ({row['代码']})</b> <span style="color:#FFD700;margin-left:15px;">{row['AI胜率标签']} | 最高涨幅: {row['最高涨幅']}</span>
                 <p style="color:#888;font-size:0.8rem;margin:5px 0;">理由: {row['理由']}</p>
                 <small style="color:#444;">入选日期: {row['AI入选日']}</small>
             </div>""", unsafe_allow_html=True)
@@ -61,17 +61,16 @@ if st.session_state["ai_results"] is not None:
                 st.session_state["active_ticker"] = row['代码']
                 st.rerun()
 
-# 启动研判报告
+# 启动深度研判报告
 if run_main:
     target = st.session_state["active_ticker"]
     with st.status(f"🔍 虎之眼透视 {target}...", expanded=True) as status:
         ctx = engine.get_full_context(target, target)
         if ctx["price_info"]["current_price"] == "N/A":
-            st.error("⚠️ 股价读取超时，云端 IP 受限。请检查网络。")
+            st.error("⚠️ 股价读取超时，云端 IP 受限。请确认代码正确或重试。")
             st.stop()
         
         reports = []
-        t_names = [os.path.basename(s)[3:-3] for s in active_skills]
         with ThreadPoolExecutor(max_workers=len(active_skills)) as exe:
             futs = {exe.submit(orchestrator.consult_skill, s, target, ctx): s for s in active_skills}
             for f in as_completed(futs): reports.append(f.result())
@@ -79,7 +78,7 @@ if run_main:
         verdict = orchestrator.synthesize_cio(target, reports, ctx)
         status.update(label="研判报告合成完毕 ✅", state="complete")
 
-    # 指标卡
+    # 指标展示
     p = ctx['price_info']
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("标的", ctx.get('company_name'))
