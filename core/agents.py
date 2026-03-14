@@ -214,13 +214,11 @@ class LongEyeOrchestrator:
                 return emoji_map.get(sig, sig)
         return "—"
 
-    def extract_drive_type(self, verdict_text: str) -> str:
-        """从 CIO 裁决文本中提取驱动类型判定"""
-        for t in ["价值驱动", "博弈驱动", "政策陷阱"]:
-            if t in verdict_text:
-                return t
-        return "—"
 
+    def extract_drive_type(self, verdict_text: str) -> str:
+        for t in ["价值驱动", "博弈驱动", "政策陷阱"]:
+            if t in verdict_text: return t
+        return "—"
     def create_pdf(
         self,
         ticker: str,
