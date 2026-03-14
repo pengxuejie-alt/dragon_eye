@@ -1,69 +1,59 @@
-# 🐉 龙眼 A股深度研判系统
+# 🐉 龙眼 A股深度研判系统 v2.0
+> 基于虎之眼 (Eye of Tiger) 金融内核 · 指南针CYQ筹码模型 · 历史胜率追溯
 
-> 基于 **Anthropic Financial Services Plugin** 架构 + 鹰眼美股系统设计理念
-> 专为A股市场打造的多智能体并行研判平台
+## 🆕 v2.0 核心升级
 
----
+| 模块 | v1.0 | v2.0 |
+|------|------|------|
+| 选股 | 3个预设策略 | AI语义选股 + 预设策略 |
+| 信心模块 | 无 | AI入选日期 + 最高涨幅追踪 |
+| 筹码 | 简单VWAP | 指南针CYQ模型 + 锁仓信号 |
+| 换手率 | 未使用 | 四象限承接审计 |
+| 波动率 | 未使用 | ATR历史分位数审计 |
+| 收现比 | 未使用 | 05专家收现比双验证 |
+| 数据透传 | 部分 | macro_rate + profit_ratio 强制透传 |
+| 品牌 | 可选 | 全报告页眉强制注入 |
 
-## 🏗️ 系统架构
+## 📁 文件结构
 
 ```
-龙眼系统 (仿 Anthropic financial-services-plugins 架构)
-│
-├── skills/                    ← Plugin Skills 层（可热插拔的专家协议）
-│   ├── 01_价值审计.md         ← 财务健康度 + 盈利质量审计（A股CAS版）
-│   ├── 02_技术量化.md         ← 均线/量价/筹码分析（T+1制度适配）
-│   ├── 03_政策宏观.md         ← 产业政策 + LPR + 北向资金分析
-│   ├── 04_资金博弈.md         ← 龙虎榜 + 游资/机构/散户博弈
-│   ├── 05_成长质量.md         ← PEG + TAM + 规模效应分析
-│   └── 06_风险控制.md         ← A股特有风险红旗清单 + 止损模型
-│
+longeye_v2/
+├── app.py                    ← 主界面（语义选股 + CYQ仪表盘 + 信心模块）
 ├── core/
-│   ├── engine.py             ← Data Engine（AKShare + 东方财富 + FRED）
-│   └── agents.py             ← LongEyeOrchestrator（Gemini驱动）
-│
-├── app.py                    ← Streamlit 主界面
-├── requirements.txt
-└── .streamlit/secrets.toml   ← API Keys（不提交到Git）
+│   ├── engine.py             ← 虎之眼数据引擎v2（三重备份+CYQ+ATR+胜率）
+│   └── agents.py             ← 编排器v2（透传+品牌注入+一票否决）
+├── skills/
+│   ├── 00_系统编排.md        ← CIO总指挥协议（虎之眼核心）
+│   ├── 01_价值审计.md        ← 财务穿透（A股CAS版）
+│   ├── 02_技术量化.md        ← 均线量价（T+1适配）
+│   ├── 03_政策宏观.md        ← LPR+北向（宏观透传）
+│   ├── 04_资金博弈.md        ← 换手承接+CYQ（v2新增）
+│   ├── 05_成长质量.md        ← 收现比双验证（v2新增）
+│   └── 06_风险控制.md        ← ATR波动率+一票否决（v2新增）
+├── data/
+│   └── screener_track.json   ← AI胜率追踪文件（自动生成）
+└── requirements.txt
 ```
 
-## 🔑 架构对标关系
-
-| 龙眼组件 | Anthropic Plugin 对应 |
-|---------|----------------------|
-| `skills/*.md` | `equity-research/skills/*/SKILL.md` |
-| `core/engine.py` | `financial-analysis` 核心数据连接器 |
-| `LongEyeOrchestrator.consult_skill()` | Sub-agent 调用逻辑 |
-| `synthesize_cio()` | `/earnings` 命令的 CIO 合成层 |
-| Streamlit UI | Claude Cowork 前端 |
-
-## 🚀 快速启动
+## 🚀 启动
 
 ```bash
-# 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. 配置 API Keys
-mkdir .streamlit
-cat > .streamlit/secrets.toml << EOF
-GEMINI_KEY = "your-gemini-api-key"
-FRED_KEY = "your-fred-api-key"  # 可选，用于美国国债利率对比
-EOF
+# 配置 .streamlit/secrets.toml
+GEMINI_KEY = "your-key"
 
-# 3. 启动
 streamlit run app.py
 ```
 
-## 📊 A股专属特性
+## 🎯 语义选股示例
 
-相比鹰眼美股系统，龙眼专门适配了：
+| 输入 | 过滤逻辑 |
+|------|---------|
+| "快速上涨且回撤不多" | 近期涨幅>5% AND 振幅<6% |
+| "低估值蓝筹" | PE 3-20 AND 涨幅>0 |
+| "缩量锁仓" | 涨幅>2% AND 换手率<2% |
+| "小盘黑马" | 涨幅>4% AND 小市值 |
+| "外资偏好" | PE 5-30 AND 价格>10元 |
 
-1. **制度差异**：T+1、涨跌停板(±10%/±20%)、退市制度
-2. **数据源**：AKShare（免费）+ 东方财富API（无需Key）
-3. **宏观基准**：中国10年期国债 + LPR替代美债
-4. **特色因子**：北向资金、龙虎榜、股权质押率、商誉风险
-5. **政策维度**：产业政策轮动、监管风险、两会政策窗口
-
-## ⚠️ 免责声明
-
-本系统仅供学习研究，不构成投资建议。A股市场风险高，请谨慎决策。
+⚠️ 仅供学习研究，不构成投资建议
