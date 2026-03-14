@@ -6,7 +6,7 @@ from core.agents import LongEyeOrchestrator
 
 st.set_page_config(page_title="🐉 龙眼 Pro — 虎之眼内核", layout="wide")
 
-# 初始化 Session
+# 初始化
 if "active_ticker" not in st.session_state: st.session_state["active_ticker"] = "600519"
 if "ai_results" not in st.session_state: st.session_state["ai_results"] = None
 
@@ -16,7 +16,7 @@ def load_system():
 
 engine, orchestrator = load_system()
 
-# ── 侧边栏：1, 2, 3 固定架构 ──
+# ── 侧边栏：1, 2, 3 固定架构 ──────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<p style="font-size:1.5rem;font-weight:900;color:#CC0000;margin:0;">🐉 龙眼研判</p>', unsafe_allow_html=True)
     st.markdown('<p style="color:#FF8C00;font-style:italic;font-size:0.8rem;">虎之眼 Eye of Tiger 金融内核</p>', unsafe_allow_html=True)
@@ -25,7 +25,7 @@ with st.sidebar:
     sb_tabs = st.tabs(["📊 股票研判", "🔭 选股雷达", "🤖 自然语言选股"])
 
     with sb_tabs[0]:
-        t_input = st.text_input("代码", value=st.session_state["active_ticker"])
+        t_input = st.text_input("代码/名称", value=st.session_state["active_ticker"])
         st.session_state["active_ticker"] = t_input
         skill_paths = sorted(glob.glob("skills/0[1-6]*.md"))
         active_skills = [s for s in skill_paths if st.checkbox(os.path.basename(s)[3:-3], value=True, key=f"sk_{s}")]
@@ -37,14 +37,14 @@ with st.sidebar:
             st.session_state["ai_results"] = engine.get_strategy_pool(strat)
 
     with sb_tabs[2]:
-        ai_q = st.text_area("小白选股描述", placeholder="如：快速上涨而回撤不多")
+        ai_q = st.text_area("小白选股", placeholder="快速上涨且回撤不多...")
         if st.button("🧠 AI 语义扫描", use_container_width=True):
             st.session_state["ai_results"] = engine.get_ai_screener(ai_q)
 
-# ── 主界面：展示逻辑 ──
+# ── 主界面：展示逻辑 ────────────────────────────────────────────────────
 st.markdown('<h1 style="color:#CC0000;">🐉 龙眼 A股深度研判系统</h1>', unsafe_allow_html=True)
 
-# 展示选股池 (AI 胜率追踪)
+# 选股池 (AI 信心模块)
 if st.session_state["ai_results"] is not None:
     st.subheader("🎯 推荐标的 (历史胜率追踪)")
     for _, row in st.session_state["ai_results"].iterrows():
@@ -61,13 +61,13 @@ if st.session_state["ai_results"] is not None:
                 st.session_state["active_ticker"] = row['代码']
                 st.rerun()
 
-# 启动深度研判报告
+# 深度审计执行
 if run_main:
     target = st.session_state["active_ticker"]
-    with st.status(f"🔍 虎之眼透视 {target}...", expanded=True) as status:
+    with st.status(f"🔍 虎之眼正在穿透 {target}...", expanded=True) as status:
         ctx = engine.get_full_context(target, target)
         if ctx["price_info"]["current_price"] == "N/A":
-            st.error("⚠️ 股价读取超时，云端 IP 受限。请确认代码正确或重试。")
+            st.error("⚠️ 股价读取超时，云端 IP 受限。请检查代码是否正确。")
             st.stop()
         
         reports = []
@@ -78,11 +78,11 @@ if run_main:
         verdict = orchestrator.synthesize_cio(target, reports, ctx)
         status.update(label="研判报告合成完毕 ✅", state="complete")
 
-    # 指标展示
+    # 结果卡片
     p = ctx['price_info']
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("标的", ctx.get('company_name'))
-    c2.metric("价格", f"¥{p['current_price']}", f"{p['change_pct']}%")
+    c1.metric("公司名称", ctx.get('company_name', target)) 
+    c2.metric("当前价格", f"¥{p['current_price']}", f"{p['change_pct']}%")
     c3.metric("获利盘 (CYQ)", ctx.get('profit_ratio', '暂无数据'))
     c4.metric("中债 10Y", f"{ctx.get('macro_rate')}%")
 
