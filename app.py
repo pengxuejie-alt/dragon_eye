@@ -8,7 +8,7 @@ from core.agents import LongEyeOrchestrator
 
 st.set_page_config(page_title="🐉 龙眼 Pro — 虎之眼内核", layout="wide")
 
-# UI 固定与修复
+# CSS 注入修复 UI 溢出与间距
 st.markdown("""
 <style>
     .stTabs [data-baseweb="tab-list"] button { font-size: 15px !important; }
@@ -27,6 +27,7 @@ def load_system():
 engine, orchestrator = load_system()
 
 def render_hexagon(scores: list, labels: list):
+    """绘制量化六边形评分图"""
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
         r=scores + [scores[0]], theta=labels + [labels[0]],
@@ -52,6 +53,7 @@ with st.sidebar:
         run_audit = st.button("🚀 启动穿透审计", type="primary", use_container_width=True)
 
     with menu[1]:
+        st.markdown("**指南针模式选股 (整合 AI 选股)**")
         mode = st.selectbox("雷达模式", ["异动扫描", "资金净流入", "自然语言模式"])
         q = st.text_area("描述需求") if mode == "自然语言模式" else ""
         if st.button("🔭 开启监测", use_container_width=True):
@@ -61,22 +63,22 @@ with st.sidebar:
 # ── 主界面渲染 ──
 st.markdown('<h1 style="color:#CC0000;">🐉 龙眼 — 虎之眼金融内核</h1>', unsafe_allow_html=True)
 
-# 选股池 (修复跳转)
+# 雷达扫描成果
 if st.session_state.get("radar_results") is not None:
-    with st.expander("🎯 雷达结果 (点击审计)", expanded=True):
+    with st.expander("🎯 实时雷达发现 (点击即可审计)", expanded=True):
         for _, row in st.session_state["radar_results"].iterrows():
             if st.button(f"{row['名称']} ({row['代码']}) | 涨幅: {row['涨跌幅']}%", key=row['代码']):
                 st.session_state["active_ticker"] = row['代码']
                 st.session_state["report_data"] = None
                 st.rerun()
 
-# 审计逻辑
+# 审计逻辑流
 if run_audit:
     target = st.session_state["active_ticker"]
     with st.status(f"🔍 正在穿透审计: {target}...", expanded=True) as status:
         ctx = engine.get_full_context(target, target)
         if ctx["price_info"]["current_price"] == "N/A":
-            st.error("⚠️ 通讯链路受阻，IP 已被封锁。建议稍后重试。")
+            st.error("⚠️ 线路全线受阻，IP 封锁严重。建议在侧边栏点击刷新或稍后尝试。")
             st.stop()
         
         t_names = [os.path.basename(s)[3:-3] for s in active_skills]
@@ -87,16 +89,21 @@ if run_audit:
         
         ordered_reports = [reports_map[s] for s in active_skills]
         verdict = orchestrator.synthesize_cio(target, ordered_reports, ctx)
-        st.session_state["report_data"] = {"ctx": ctx, "reports": ordered_reports, "verdict": verdict, "t_names": t_names, "scores": [85, 75, 90, 60, 80, 95]}
+        # 默认评分模拟 (后续由专家协议动态打分)
+        st.session_state["report_data"] = {
+            "ctx": ctx, "reports": ordered_reports, "verdict": verdict, 
+            "t_names": t_names, "scores": [85, 75, 90, 60, 80, 95]
+        }
         status.update(label="审计完毕 ✅", state="complete")
 
+# 渲染审计成果
 if st.session_state.get("report_data"):
     data = st.session_state["report_data"]
     p = data["ctx"]["price_info"]
     st.divider()
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("公司名称", data["ctx"]["company_name"])
-    c2.metric("价格", f"¥{p['current_price']}", f"{p['change_pct']}%")
+    c2.metric("当前价格", f"¥{p['current_price']}", f"{p['change_pct']}%")
     c3.metric("获利比例", data["ctx"]["profit_ratio"])
     c4.metric("中债 10Y", f"{data['ctx']['macro_rate']}%")
 
@@ -105,7 +112,8 @@ if st.session_state.get("report_data"):
         st.subheader("👑 CIO 综合裁决")
         st.markdown(f'<div class="verdict-box">{data["verdict"]}</div>', unsafe_allow_html=True)
     with r:
-        st.subheader("📊 维度评分图")
+        st.subheader("📊 维度量化评分")
+        
         st.plotly_chart(render_hexagon(data["scores"], data["t_names"]), use_container_width=True)
 
     st.divider()
