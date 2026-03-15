@@ -4,9 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.engine import AShareDataEngine
 from core.agents import LongEyeOrchestrator
 
+# 品牌与页面配置
 st.set_page_config(page_title="🐉 龙眼 Pro — 虎之眼内核", layout="wide")
 
-# 初始化
+# 初始化 Session
 if "active_ticker" not in st.session_state: st.session_state["active_ticker"] = "600519"
 if "ai_results" not in st.session_state: st.session_state["ai_results"] = None
 
@@ -32,42 +33,45 @@ with st.sidebar:
         run_main = st.button("🚀 启动全维度审计", type="primary", use_container_width=True)
 
     with sb_tabs[1]:
-        strat = st.selectbox("模式", ["涨停最强", "虎之眼价值"])
+        strat = st.selectbox("雷达模式", ["涨停最强", "虎之眼价值"])
         if st.button("🔭 执行扫描", use_container_width=True):
             st.session_state["ai_results"] = engine.get_strategy_pool(strat)
 
     with sb_tabs[2]:
-        ai_q = st.text_area("小白选股", placeholder="快速上涨且回撤不多...")
-        if st.button("🧠 AI 语义扫描", use_container_width=True):
-            st.session_state["ai_results"] = engine.get_ai_screener(ai_q)
+        ai_q = st.text_area("语义选股", placeholder="如：快速上涨且回撤不多")
+        if st.button("🧠 AI 扫描", use_container_width=True):
+            if ai_q.strip():
+                st.session_state["ai_results"] = engine.get_ai_screener(ai_q)
 
-# ── 主界面：展示逻辑 ────────────────────────────────────────────────────
+# ── 主界面渲染 ────────────────────────────────────────────────────
 st.markdown('<h1 style="color:#CC0000;">🐉 龙眼 A股深度研判系统</h1>', unsafe_allow_html=True)
+st.markdown('<div style="background:#1a0000; padding:8px 15px; border-radius:5px; color:#FFD700; font-size:0.8rem; margin-bottom:20px;">'
+            '🐯 虎之眼 (Eye of Tiger) 金融内核 · 极速单点行情引擎 · 指南针 CYQ 筹码模型</div>', unsafe_allow_html=True)
 
-# 选股池 (AI 信心模块)
+# 选股池成果展示 (带胜率追踪)
 if st.session_state["ai_results"] is not None:
-    st.subheader("🎯 推荐标的 (历史胜率追踪)")
+    st.subheader("🎯 推荐标的 (历史预测追踪)")
     for _, row in st.session_state["ai_results"].iterrows():
         c1, c2 = st.columns([5, 1])
         with c1:
             st.markdown(f"""
             <div style="background:#111;padding:12px;border-radius:8px;border-left:4px solid #CC0000;margin-bottom:8px;">
-                <b>{row['名称']} ({row['代码']})</b> <span style="color:#FFD700;margin-left:15px;">{row['AI胜率标签']} | 最高涨幅: {row['最高涨幅']}</span>
+                <b>{row['名称']} ({row['代码']})</b> <span style="color:#FFD700;margin-left:15px;">{row['AI胜率标签']} | 最高涨幅: {row['入选后最高涨幅']}</span>
                 <p style="color:#888;font-size:0.8rem;margin:5px 0;">理由: {row['理由']}</p>
-                <small style="color:#444;">入选日期: {row['AI入选日']}</small>
             </div>""", unsafe_allow_html=True)
         with c2:
-            if st.button("研判", key=f"p_{row['代码']}"):
+            st.write("")
+            if st.button("开始研判", key=f"p_{row['代码']}"):
                 st.session_state["active_ticker"] = row['代码']
                 st.rerun()
 
-# 深度审计执行
+# 审计执行流
 if run_main:
     target = st.session_state["active_ticker"]
     with st.status(f"🔍 虎之眼正在穿透 {target}...", expanded=True) as status:
         ctx = engine.get_full_context(target, target)
         if ctx["price_info"]["current_price"] == "N/A":
-            st.error("⚠️ 股价读取超时，云端 IP 受限。请检查代码是否正确。")
+            st.error("⚠️ 行情读取失败，可能由于云端 IP 限制。请尝试输入代码重试。")
             st.stop()
         
         reports = []
@@ -78,10 +82,10 @@ if run_main:
         verdict = orchestrator.synthesize_cio(target, reports, ctx)
         status.update(label="研判报告合成完毕 ✅", state="complete")
 
-    # 结果卡片
+    # 结果卡片展示
     p = ctx['price_info']
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("公司名称", ctx.get('company_name', target)) 
+    c1.metric("公司名称", ctx.get('company_name', target)) # [修复] 强制正确显示公司全称
     c2.metric("当前价格", f"¥{p['current_price']}", f"{p['change_pct']}%")
     c3.metric("获利盘 (CYQ)", ctx.get('profit_ratio', '暂无数据'))
     c4.metric("中债 10Y", f"{ctx.get('macro_rate')}%")
