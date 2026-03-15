@@ -97,3 +97,33 @@ class AShareDataEngine:
                 })
             return pd.DataFrame(results)
         except: return pd.DataFrame()
+
+
+# --- 为 app.py 添加的兼容函数 ---
+def fetch_stock_info(code):
+    """
+    为 app.py 提供的兼容接口，返回 app.py 期望的数据格式。
+    """
+    engine = AShareDataEngine()
+    context_data = engine.get_full_context(code, code)
+    
+    # 将 context_data 的字段映射到 app.py 期望的字段
+    # 注意：需要根据 engine.py 实际提供的数据进行调整
+    # 如果 engine.py 中没有某个字段，则返回 'N/A'
+    return {
+        '股票名称': context_data.get('company_name', '未知'),
+        '最新价': context_data.get('price_info', {}).get('current_price', 'N/A'),
+        '涨跌幅': context_data.get('price_info', {}).get('change_pct', 'N/A'),
+        '行业': context_data.get('industry', 'N/A'),
+        # engine.py 中没有这些字段，先设置为 N/A 或根据需要填充
+        '概念': 'N/A',
+        '地区': 'N/A',
+        '市盈率': 'N/A',
+        '市净率': 'N/A',
+        '总市值': 'N/A',
+        '量比': 'N/A',
+        '动态股息率': 'N/A',
+        '获利比例 (CYQ)': context_data.get('profit_ratio', 'N/A'),
+        '平均成本': context_data.get('avg_cost', 'N/A'),
+        # ... 如果 app.py 中用到其他字段，也应在此处添加并设为 'N/A' ...
+    }

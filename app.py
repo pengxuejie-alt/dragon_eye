@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import os
-from core.engine import fetch_stock_info
+from core.engine import fetch_stock_info # 这行现在可以正确执行
 from core.agents import LongEyeOrchestrator
 
 # --- 页面配置 ---
@@ -48,7 +48,7 @@ if st.button("🚀 开始龙眼研判", type="primary"):
         else:
             with st.spinner('正在启动虎之眼金融内核 v12.0 (百炼版)...'):
                 # 获取股票基础信息
-                stock_data = fetch_stock_info(clean_ticker)
+                stock_data = fetch_stock_info(clean_ticker) # 这行现在可以正确调用
                 if not stock_data:
                     st.error(f"未能获取到 {clean_ticker} 的数据，请检查代码是否正确。")
                 else:
