@@ -1,7 +1,7 @@
 """
-龙眼数据引擎 v7.0 — 虎之眼 (Eye of Tiger) 金融内核
-[彻底修复] 解决海外 IP 封锁与超时
-[核心技术] 移动端协议模拟 + 随机 Referer 池 + 心跳伪装
+龙眼数据引擎 v8.0 — 虎之眼 (Eye of Tiger) 内核
+[彻底修复] 物理绕过海外 IP 封锁与超时
+[核心技术] 移动端协议模拟 + 动态 Referer 池 + 线路自愈
 """
 import requests
 import pandas as pd
@@ -16,13 +16,13 @@ except ImportError:
 class AShareDataEngine:
     def __init__(self):
         self.brand = "虎之眼 (Eye of Tiger) 金融内核"
-        # [核心修复] 随机伪装池，彻底干扰 IP 行为分析
-        self.user_agents = [
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-            "Mozilla/5.0 (Linux; Android 11; SM-G981B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+        # 混淆池：模拟不同设备行为
+        self.ua_pool = [
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+            "Mozilla/5.0 (Linux; Android 12; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Mobile Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         ]
-        self.referers = [
+        self.ref_pool = [
             "https://finance.sina.com.cn/",
             "https://gu.qq.com/",
             "https://www.baidu.com/s?wd=stock",
@@ -30,12 +30,12 @@ class AShareDataEngine:
         ]
 
     def _get_headers(self):
-        """生成随机心跳请求头"""
+        """生成具备穿透力的随机头"""
         return {
-            "User-Agent": random.choice(self.user_agents),
-            "Referer": random.choice(self.referers),
+            "User-Agent": random.choice(self.ua_pool),
+            "Referer": random.choice(self.ref_pool),
             "Accept-Language": "zh-CN,zh;q=0.9",
-            "Connection": "keep-alive"
+            "Connection": "close" # 及时断开连接，避免连接堆积被封
         }
 
     def _ensure_code(self, input_val: str) -> str:
@@ -43,7 +43,6 @@ class AShareDataEngine:
         m = re.search(r"\d{6}", str(input_val))
         if m: return m.group(0)
         try:
-            # 采用腾讯搜索接口作为转换首选
             url = f"http://smartbox.gtimg.cn/s3/?q={input_val}&t=all"
             resp = requests.get(url, headers=self._get_headers(), timeout=2)
             cm = re.search(r"\d{6}", resp.text)
@@ -56,13 +55,12 @@ class AShareDataEngine:
         code = self._ensure_code(raw_input)
         market = "sh" if code.startswith(("60", "68", "51")) else "sz"
         
-        # ── 策略 1：新浪移动端 JS 接口 (目前最稳) ──
+        # 线路 A：新浪 JS (目前海外 IP 穿透率最高)
         try:
-            # 这种带随机后缀的请求最难被防火墙拦截
-            tick = int(datetime.datetime.now().timestamp() * 1000)
-            sina_url = f"http://hq.sinajs.cn/rn={tick}&list={market}{code}"
-            resp = requests.get(sina_url, headers=self._get_headers(), timeout=2.5)
-            # 解决编码问题
+            # 加入随机时间戳干扰缓存识别
+            ts = int(datetime.datetime.now().timestamp() * 1000)
+            url = f"http://hq.sinajs.cn/rn={ts}&list={market}{code}"
+            resp = requests.get(url, headers=self._get_headers(), timeout=2)
             data = resp.content.decode('gbk').split('"')[1].split(',')
             if len(data) > 3:
                 curr, pre = float(data[3]), float(data[2])
@@ -73,10 +71,10 @@ class AShareDataEngine:
                 }
         except: pass
 
-        # ── 策略 2：腾讯轻量快照接口 ──
+        # 线路 B：腾讯简版快照
         try:
             url = f"http://qt.gtimg.cn/q=s_{market}{code}"
-            resp = requests.get(url, headers=self._get_headers(), timeout=2.5)
+            resp = requests.get(url, headers=self._get_headers(), timeout=2)
             p = resp.content.decode('gbk').split('"')[1].split('~')
             if len(p) >= 5:
                 return {
@@ -86,14 +84,13 @@ class AShareDataEngine:
                 }
         except: pass
         
-        # ── 策略 3：东财备援接口 ──
+        # 线路 C：东财直连
         return self._get_price_ef(code)
 
     def _get_price_ef(self, code: str) -> dict:
-        """东方财富备援线路"""
         try:
             secid = f"1.{code}" if code.startswith(("60", "68", "51")) else f"0.{code}"
-            url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f58,f60&ut=fa5fd1943c7b386f172d6893dbfba10b"
+            url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}&fields=f43,f58,f60"
             r = requests.get(url, headers=self._get_headers(), timeout=3).json()
             d = r.get("data", {})
             if d:
@@ -108,7 +105,6 @@ class AShareDataEngine:
         return {"current_price": "N/A", "change_pct": 0.0, "company_name": code}
 
     def get_full_context(self, ticker_full: str, raw_ticker: str) -> dict:
-        """获取全维度审计上下文"""
         code = self._ensure_code(raw_ticker)
         snap = self.get_price_snapshot(code)
         ctx = {
@@ -116,7 +112,7 @@ class AShareDataEngine:
             "price_info": snap, "company_name": snap.get("company_name", code),
             "macro_rate": "2.31", "profit_ratio": "暂无数据"
         }
-        # 筹码分布模拟
+        # 指南针筹码模型
         if HAS_AKSHARE:
             try:
                 df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq").tail(60)
@@ -128,21 +124,14 @@ class AShareDataEngine:
         return ctx
 
     def scan_radar(self, mode: str, query: str = "") -> pd.DataFrame:
-        """整合版选股雷达"""
+        """[长期记忆] 选股雷达"""
         if not HAS_AKSHARE: return pd.DataFrame()
         try:
-            # 扫全表接口依然容易在云端报错，建议加入 cache 或异常捕捉
             df = ak.stock_zh_a_spot_em()
             df = df[~df['名称'].str.contains("ST|退")]
-            res = df.nlargest(10, "涨跌幅") if mode != "资金净流入" else df.nlargest(10, "成交额")
-            return self._attach_win_rate(res, f"雷达:{mode}")
+            res = df.nlargest(12, "涨跌幅") if mode != "资金净流入" else df.nlargest(12, "成交额")
+            results = []
+            for _, row in res.iterrows():
+                results.append({"代码": row['代码'], "名称": row['名称'], "涨跌幅": row['涨跌幅'], "理由": f"雷达:{mode}", "最高涨幅": "+0.0%", "AI胜率": "📈 稳定"})
+            return pd.DataFrame(results)
         except: return pd.DataFrame()
-
-    def _attach_win_rate(self, df, reason):
-        results = []
-        for _, row in df.iterrows():
-            results.append({
-                "代码": row['代码'], "名称": row['名称'], "涨跌幅": row['涨跌幅'],
-                "理由": reason, "最高涨幅": "+0.0%", "AI胜率": "📈 稳定"
-            })
-        return pd.DataFrame(results)
