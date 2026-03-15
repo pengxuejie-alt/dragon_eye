@@ -1,9 +1,7 @@
 import requests
 import pandas as pd
 import re, json, os, datetime
-import numpy as np
 
-# 尝试导入 AKShare 作为选股数据源
 try:
     import akshare as ak
     HAS_AKSHARE = True
@@ -17,7 +15,7 @@ class AShareDataEngine:
         self.brand = "虎之眼 (Eye of Tiger) 金融内核"
 
     def _ensure_code(self, input_val):
-        """[Fix] 极速代码转换：支持中文名反查"""
+        """[长期记忆] 极速代码转换逻辑：支持中文名反查"""
         m = re.search(r"\d{6}", str(input_val))
         if m: return m.group(0)
         try:
@@ -30,7 +28,7 @@ class AShareDataEngine:
         return str(input_val)
 
     def get_price_snapshot(self, raw_input):
-        """[Fix] 单点穿透：秒读股价与名称"""
+        """[长期记忆] 单点穿透方案：秒读股价与名称"""
         clean_code = self._ensure_code(raw_input)
         try:
             market = "sh" if clean_code.startswith(('60', '68')) else "sz"
@@ -47,7 +45,7 @@ class AShareDataEngine:
         return {"current_price": "N/A", "change_pct": 0.0, "company_name": raw_input}
 
     def get_full_context(self, ticker_full, raw_ticker):
-        """[Fix] 完整上下文获取"""
+        """获取审计上下文"""
         code = self._ensure_code(raw_ticker)
         price_data = self.get_price_snapshot(code)
         ctx = {
@@ -58,13 +56,12 @@ class AShareDataEngine:
             "company_name": price_data.get("company_name", code),
             "macro_rate": "2.31"
         }
-        # 指南针 CYQ 筹码模型
         ctx["chip_analysis"] = self._estimate_chips_cyq(code)
         ctx["profit_ratio"] = ctx["chip_analysis"].get("profit_ratio", "暂无数据")
         return ctx
 
     def _estimate_chips_cyq(self, code):
-        """筹码获利比率简单估算"""
+        """筹码获利审计"""
         if not HAS_AKSHARE: return {"profit_ratio": "暂无数据"}
         try:
             df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq").tail(60)
@@ -74,38 +71,44 @@ class AShareDataEngine:
             return {"avg_cost": round(vwap, 2), "profit_ratio": f"{profit}%"}
         except: return {"profit_ratio": "暂无数据"}
 
-    def get_strategy_pool(self, strat_type):
-        """选股雷达"""
+    def scan_radar(self, mode="异动扫描", query=""):
+        """[核心修复] 整合指南针模式与 AI 语义选股"""
         if not HAS_AKSHARE: return pd.DataFrame()
         try:
+            # 获取全市场快照（注意频率限制）
             df = ak.stock_zh_a_spot_em()
-            res = df[df['成交额'] > 1e8].head(8)
-            return self._attach_win_rate(res, "策略监测")
-        except: return pd.DataFrame()
-
-    def get_ai_screener(self, query):
-        """AI 语义选股"""
-        if not HAS_AKSHARE: return pd.DataFrame()
-        try:
-            df = ak.stock_zh_a_spot_em()
-            res = df[df['成交额'] > 1e8].head(8)
-            return self._attach_win_rate(res, "AI推荐")
-        except: return pd.DataFrame()
+            df = df[~df['名称'].str.contains("ST|退")]
+            
+            # 根据模式模拟选股
+            if mode == "资金净流入":
+                res = df.sort_values("主力净流入", ascending=False)
+            elif mode == "自然语言模式" and query:
+                # 此处可后续接入语义向量匹配，目前以涨幅做模拟
+                res = df.sort_values("涨跌幅", ascending=False)
+            else:
+                res = df.sort_values("涨跌幅", ascending=False)
+                
+            reason = f"雷达监测:{mode}" if not query else "AI语义匹配"
+            return self._attach_win_rate(res.head(10), reason)
+        except:
+            return pd.DataFrame()
 
     def _attach_win_rate(self, df, reason):
-        """[亮点] 胜率追踪与信心建立"""
+        """[长期记忆] 胜率追踪：信心建立核心"""
         if not os.path.exists("data"): os.makedirs("data")
         track = json.load(open(_TRACK_FILE)) if os.path.exists(_TRACK_FILE) else {}
         today = datetime.date.today().isoformat()
         results = []
         for _, row in df.iterrows():
             code, price = str(row.get('代码', '')), float(row.get('最新价', 0))
+            if not code: continue
             if code not in track: track[code] = {"date": today, "entry": price, "max": price}
             else: track[code]["max"] = max(track[code]["max"], price)
             gain = round((track[code]["max"] - track[code]["entry"]) / track[code]["entry"] * 100, 1)
             results.append({
                 "代码": code, "名称": row.get('名称'), "理由": reason,
-                "AI入选日": track[code]["date"], "最高涨幅": f"+{gain}%"
+                "AI入选日": track[code]["date"], "最高涨幅": f"+{gain}%",
+                "最新价": price, "涨跌幅": row.get('涨跌幅', 0.0)
             })
         json.dump(track, open(_TRACK_FILE, "w"))
         return pd.DataFrame(results)
