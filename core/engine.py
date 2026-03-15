@@ -15,7 +15,7 @@ class AShareDataEngine:
         self.brand = "虎之眼 (Eye of Tiger) 金融内核"
 
     def _ensure_code(self, input_val):
-        """[长期记忆] 极速代码转换逻辑：支持中文名反查"""
+        """[长期记忆] 极速代码转换逻辑"""
         m = re.search(r"\d{6}", str(input_val))
         if m: return m.group(0)
         try:
@@ -45,7 +45,7 @@ class AShareDataEngine:
         return {"current_price": "N/A", "change_pct": 0.0, "company_name": raw_input}
 
     def get_full_context(self, ticker_full, raw_ticker):
-        """获取审计上下文"""
+        """获取审计上下文，确保名称透传"""
         code = self._ensure_code(raw_ticker)
         price_data = self.get_price_snapshot(code)
         ctx = {
@@ -61,7 +61,7 @@ class AShareDataEngine:
         return ctx
 
     def _estimate_chips_cyq(self, code):
-        """筹码获利审计"""
+        """筹码获利审计模型"""
         if not HAS_AKSHARE: return {"profit_ratio": "暂无数据"}
         try:
             df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq").tail(60)
@@ -75,15 +75,14 @@ class AShareDataEngine:
         """[核心修复] 整合指南针模式与 AI 语义选股"""
         if not HAS_AKSHARE: return pd.DataFrame()
         try:
-            # 获取全市场快照（注意频率限制）
+            # 云端环境中，此接口建议配合 st.cache_data 使用
             df = ak.stock_zh_a_spot_em()
             df = df[~df['名称'].str.contains("ST|退")]
             
-            # 根据模式模拟选股
             if mode == "资金净流入":
                 res = df.sort_values("主力净流入", ascending=False)
             elif mode == "自然语言模式" and query:
-                # 此处可后续接入语义向量匹配，目前以涨幅做模拟
+                # 简单模拟：以涨幅代表热度
                 res = df.sort_values("涨跌幅", ascending=False)
             else:
                 res = df.sort_values("涨跌幅", ascending=False)
@@ -94,7 +93,7 @@ class AShareDataEngine:
             return pd.DataFrame()
 
     def _attach_win_rate(self, df, reason):
-        """[长期记忆] 胜率追踪：信心建立核心"""
+        """[长期记忆] 胜率追踪器"""
         if not os.path.exists("data"): os.makedirs("data")
         track = json.load(open(_TRACK_FILE)) if os.path.exists(_TRACK_FILE) else {}
         today = datetime.date.today().isoformat()
@@ -107,8 +106,7 @@ class AShareDataEngine:
             gain = round((track[code]["max"] - track[code]["entry"]) / track[code]["entry"] * 100, 1)
             results.append({
                 "代码": code, "名称": row.get('名称'), "理由": reason,
-                "AI入选日": track[code]["date"], "最高涨幅": f"+{gain}%",
-                "最新价": price, "涨跌幅": row.get('涨跌幅', 0.0)
+                "AI入选日": track[code]["date"], "最高涨幅": f"+{gain}%"
             })
         json.dump(track, open(_TRACK_FILE, "w"))
         return pd.DataFrame(results)
