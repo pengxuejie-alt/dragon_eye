@@ -22,7 +22,7 @@ if "report_data" not in st.session_state: st.session_state["report_data"] = None
 
 @st.cache_resource
 def load_system():
-    return AShareDataEngine(), LongEyeOrchestrator(api_key=st.secrets["GEMINI_KEY"])
+    rreturn AShareDataEngine(), LongEyeOrchestrator()
 
 engine, orchestrator = load_system()
 
