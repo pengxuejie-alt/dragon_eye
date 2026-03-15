@@ -6,10 +6,7 @@ from core.agents import LongEyeOrchestrator
 
 st.set_page_config(page_title="🐉 龙眼 Pro — 虎之眼内核", layout="wide")
 
-# 初始化
 if "active_ticker" not in st.session_state: st.session_state["active_ticker"] = "600519"
-if "ai_results" not in st.session_state: st.session_state["ai_results"] = None
-# [修复] 增加持久化报告缓存
 if "report_data" not in st.session_state: st.session_state["report_data"] = None
 
 @st.cache_resource
@@ -34,21 +31,19 @@ with st.sidebar:
         run_main = st.button("🚀 启动全维度审计", type="primary", use_container_width=True)
 
     with sb_tabs[1]:
-        strat = st.selectbox("模式", ["涨停最强", "虎之眼价值"])
-        if st.button("🔭 执行扫描", use_container_width=True):
-            st.session_state["ai_results"] = engine.get_strategy_pool(strat)
+        if st.button("🔭 执行策略扫描", use_container_width=True):
+            st.session_state["ai_results"] = engine.get_strategy_pool("异动")
 
     with sb_tabs[2]:
         ai_q = st.text_area("小白选股", placeholder="如：快速上涨且回撤不多")
         if st.button("🧠 AI 语义扫描", use_container_width=True):
-            if ai_q.strip():
-                st.session_state["ai_results"] = engine.get_ai_screener(ai_q)
+            st.session_state["ai_results"] = engine.get_ai_screener(ai_q)
 
 # ── 主界面渲染 ──
 st.markdown('<h1 style="color:#CC0000;">🐉 龙眼 A股深度研判系统</h1>', unsafe_allow_html=True)
 
 # 选股池展示
-if st.session_state["ai_results"] is not None:
+if st.session_state.get("ai_results") is not None:
     st.subheader("🎯 推荐标的 (历史胜率追踪)")
     for _, row in st.session_state["ai_results"].iterrows():
         c1, c2 = st.columns([5, 1])
@@ -63,7 +58,6 @@ if st.session_state["ai_results"] is not None:
                 st.session_state["active_ticker"] = row['代码']
                 st.rerun()
 
-# ── 审计核心逻辑 ──
 if run_main:
     target = st.session_state["active_ticker"]
     with st.status(f"🔍 虎之眼正在穿透 {target}...", expanded=True) as status:
@@ -72,21 +66,16 @@ if run_main:
             st.error("⚠️ 行情读取失败，云端 IP 受限。")
             st.stop()
         
-        reports = []
-        t_names = [os.path.basename(s)[3:-3] for s in active_skills]
+        reports, t_names = [], [os.path.basename(s)[3:-3] for s in active_skills]
         with ThreadPoolExecutor(max_workers=len(active_skills)) as exe:
             futs = {exe.submit(orchestrator.consult_skill, s, target, ctx): s for s in active_skills}
             for f in as_completed(futs): reports.append(f.result())
         
         verdict = orchestrator.synthesize_cio(target, reports, ctx)
+        st.session_state["report_data"] = {"ctx": ctx, "reports": reports, "verdict": verdict, "t_names": t_names}
         status.update(label="研判报告合成完毕 ✅", state="complete")
-        
-        # [修复] 将结果存入缓存，防止渲染过程中丢失
-        st.session_state["report_data"] = {
-            "ctx": ctx, "reports": reports, "verdict": verdict, "t_names": t_names
-        }
 
-# ── [修复] 结果展示区 (确保审计结束后内容可见) ──
+# 结果展现区
 if st.session_state["report_data"]:
     data = st.session_state["report_data"]
     ctx, reports, verdict, t_names = data["ctx"], data["reports"], data["verdict"], data["t_names"]
@@ -100,12 +89,4 @@ if st.session_state["report_data"]:
     c4.metric("中债 10Y", f"{ctx.get('macro_rate')}%")
 
     st.subheader("👑 CIO 综合裁决")
-    st.markdown(f'<div style="background:#0d0d0d;color:#FFD700;padding:20px;border-left:5px solid #CC0000;border-radius:8px;">{verdict}</div>', unsafe_allow_html=True)
-    
-    # 专家 Tab 分页
-    st.divider()
-    tabs = st.tabs(t_names)
-    for i, tab in enumerate(tabs):
-        with tab:
-            st.markdown(f'<p style="color:#888; font-size:0.8rem;">🐯 虎之眼 {t_names[i]} 专项审计报告</p>', unsafe_allow_html=True)
-            st.markdown(reports[i])
+    st.markdown(f'<div style="background:#0d0d0d;color:#FFD700;padding:20px;border-left:5px solid #CC0000;">{verdict}</div>', unsafe_allow_html=True)
